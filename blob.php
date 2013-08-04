@@ -31,7 +31,7 @@ $blobPerPage = 20;
 use WindowsAzure\Common\ServicesBuilder;
 use WindowsAzure\Common\ServiceException;
 
-use WindowsAzure\Blob\Models\CreateBlobOptions;
+use WindowsAzure\Blob\Models\CommitBlobBlocksOptions;
 use WindowsAzure\Blob\Models\CreateContainerOptions;
 use WindowsAzure\Blob\Models\PublicAccessType;
 
@@ -40,8 +40,8 @@ use WindowsAzure\Blob\Models\Container;
 use WindowsAzure\Blob\Models\ContainerProperties;
 
 use WindowsAzure\Blob\Models\Blob;
-
-$blobPerPage = 20;
+use WindowsAzure\Blob\Models\Block;
+use WindowsAzure\Blob\Models\BlobBlockType;
 
 /**
  * This class provides Azure Blob interface
@@ -196,19 +196,33 @@ class AzureBlob
    */
   public function uploadBlob($containerName, $blobName, $blobPath)
   {
-    $options = new CreateBlobOptions();
+    $options = new CommitBlobBlocksOptions();
 
     $options->setBlobContentType(mime_content_type($blobPath));
-    $options->setContentType(mime_content_type($blobPath));
 
     $contentMd5 = base64_encode(md5_file($blobPath, true));
-    $contents = fopen($blobPath, "r");
 
     $options->setBlobContentMD5($contentMd5);
-    $options->setContentMD5($contentMd5);
 
     try {
-      $this->blobService->createBlockBlob($containerName, $blobName, $contents, $options);
+      $content = fopen($blobPath, "rb");
+      $counter = 1;
+      $blockIds = array();
+
+      while (!feof($content))
+      {
+        $blockId = str_pad($counter, 6, "0", STR_PAD_LEFT);
+        $block = new Block();
+        $block->setBlockId(base64_encode($blockId));
+        $block->setType(BlobBlockType::UNCOMMITTED_TYPE);
+        array_push($blockIds, $block);
+        $data = fread($content, 1024 * 1024);
+        $this->blobService->createBlobBlock($containerName, $blobName, base64_encode($blockId), $data);
+        $counter++;
+      }
+
+      fclose($content);
+      $this->blobService->commitBlobBlocks($containerName, $blobName, $blockIds, $options);
 
     } catch(ServiceException $e){
       $this->errorCode = $e->getCode();
@@ -422,7 +436,7 @@ h1 {
 }
 .login .loginLabel {
   display: block;
-  width: 75px;
+  width: 100px;
   float: left;
 }
 
