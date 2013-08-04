@@ -29,7 +29,7 @@ require_once 'vendor/autoload.php';
 $blobPerPage = 20;
 
 /* upload max_file_size */
-$maxUploadFileSize = 64 * 1024 *1024;
+$maxUploadFileSize = 1024 * 1024 *1024;
 
 use WindowsAzure\Common\ServicesBuilder;
 use WindowsAzure\Common\ServiceException;
