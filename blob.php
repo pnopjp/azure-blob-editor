@@ -28,6 +28,9 @@ require_once 'vendor/autoload.php';
 /* change blob count of list if you want  */
 $blobPerPage = 20;
 
+/* upload max_file_size */
+$maxUploadFileSize = 64 * 1024 *1024;
+
 use WindowsAzure\Common\ServicesBuilder;
 use WindowsAzure\Common\ServiceException;
 
@@ -534,7 +537,8 @@ h1 {
     <input type="hidden" name="key" value="<?php echo $azureKey;?>">
     <input type="hidden" name="page" value="uploadBlob">
     <input type="hidden" name="containerName" value="<?php echo $containerName;?>">
-    <input type="hidden" name="MAX_FILE_SIZE" value="30000000000" />
+    <input type="hidden" name="MAX_FILE_SIZE" value="<?php echo intval($maxUploadFileSize);?>" />
+
     <label>Upload File: </label><input type="file" name="blob">
     <input type="submit" value="upload blob">
   </form>
