@@ -258,7 +258,23 @@ class AzureBlob
 
   /**
    * Delete Blob
+   *
+   * @param string $containerName container name
+   * @param string $blobName blob name
+   * @return bool
    */
+  public function deleteBlob($containerName, $blobName)
+  {
+    try {
+      $blob = $this->blobService->deleteBlob($containerName, $blobName);
+      return true;
+
+    } catch(ServiceException $e){
+      $this->errorCode = $e->getCode();
+      $this->errorMessage = $e->getMessage();
+      return false;
+    }
+  }
 
   /**
    * get Blob Count
@@ -311,7 +327,7 @@ class Pager
 }
 
 /* switch page and set Azure account and key */
-$page = $_POST['page']; /* containerList, blobList, createContainer, uploadBlob */
+$page = $_POST['page']; /* containerList, blobList, createContainer, uploadBlob, deleteBlob */
 $account = $_POST['account'];
 $azureKey = $_POST['key'];
 if ($account == "" || $azureKey == "") {
@@ -623,6 +639,14 @@ h1 {
         <input type="hidden" name="blobName" value="<?php echo $blob->getName();?>">
         <input type="submit" value="download">
       </form>
+      <form action="blob.php" method="POST" style="float:left;">
+        <input type="hidden" name="account" value="<?php echo $account;?>">
+        <input type="hidden" name="key" value="<?php echo $azureKey;?>">
+        <input type="hidden" name="page" value="deleteBlob">
+        <input type="hidden" name="containerName" value="<?php echo $containerName;?>">
+        <input type="hidden" name="blobName" value="<?php echo $blob->getName();?>">
+        <input type="submit" value="delete">
+      </form>
       <a href="#" onMouseOver="document.getElementById('metadata<?php echo $id;?>').style.display='block';" onMouseOut="document.getElementById('metadata<?php echo $id;?>').style.display='none';">
         metadata
       </a>
@@ -691,6 +715,31 @@ h1 {
       if (is_uploaded_file($_FILES["blob"]["tmp_name"]) && $azureBlob->uploadBlob($containerName, $filename, $_FILES["blob"]["tmp_name"])) {
 ?>
 <h1>Upload Success!!</h1>
+
+<div class="back">
+  <form action="blob.php" method="POST">
+    <input type="hidden" name="account" value="<?php echo $account;?>">
+    <input type="hidden" name="key" value="<?php echo $azureKey;?>">
+    <input type="hidden" name="page" value="blobList">
+    <input type="hidden" name="current" value="1">
+    <input type="hidden" name="containerName" value="<?php echo $containerName;?>">
+    <input type="submit" value="&lt;- show blob list">
+  </form>
+</div>
+
+<?php
+      } else {
+        echo '<pre>' . $azureBlob->errorMessage . '</pre>';
+        echo 'error <a onClick="history.back();">back</a>';
+      }
+
+    /* delete Blob */
+    } else if ($page === "deleteBlob") {
+      $containerName = $_POST['containerName'];
+      $filename = $_POST["blobName"];
+      if ($azureBlob->deleteBlob($containerName, $filename)) {
+?>
+<h1>Delete Success!!</h1>
 
 <div class="back">
   <form action="blob.php" method="POST">
