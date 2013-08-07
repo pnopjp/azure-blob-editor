@@ -41,10 +41,13 @@ use WindowsAzure\Blob\Models\PublicAccessType;
 use WindowsAzure\Blob\Models\ListContainersResult;
 use WindowsAzure\Blob\Models\Container;
 use WindowsAzure\Blob\Models\ContainerProperties;
+use WindowsAzure\Blob\Models\GetContainerAclResult;
 
 use WindowsAzure\Blob\Models\Blob;
 use WindowsAzure\Blob\Models\Block;
 use WindowsAzure\Blob\Models\BlobBlockType;
+
+use WindowsAzure\Common\Internal\Utilities;
 
 /**
  * This class provides Azure Blob interface
@@ -59,6 +62,16 @@ use WindowsAzure\Blob\Models\BlobBlockType;
  */
 class AzureBlob
 {
+  /**
+   * @var string : account Name
+   */
+  private $accountName;
+
+  /**
+   * @var string : access key
+   */
+  private $accessKey;
+
   /**
    * @var object : Blob Service object
    */
@@ -83,18 +96,21 @@ class AzureBlob
    * constructor
    *
    * @param string $accountName account name for access Azure storage
-   * @param string $accountKey key for access Azure storagfe
+   * @param string $accessKey key for access Azure storagfe
    * @param string $protocol protocol name for access blob storage(http or https)
    */
-  function __construct($accountName, $accountKey, $protocol='http')
+  function __construct($accountName, $accessKey, $protocol='http')
   {
     /* connection strings */
     $connectionString = 'DefaultEndpointsProtocol=' . $protocol . 
                         ';AccountName=' . $accountName . 
-                        ';AccountKey=' . $accountKey;
+                        ';AccountKey=' . $accessKey;
 
     /* connection establish */
     $this->blobService = ServicesBuilder::getInstance()->createBlobService($connectionString);
+
+    $this->accountName = $accountName;
+    $this->accessKey = $accessKey;
   }
 
   /**
@@ -120,6 +136,23 @@ class AzureBlob
     }
 
     return $list;
+  }
+
+  /**
+   * Get Container ACL
+   *
+   * @param string containerName container name
+   * @return ContainerACL
+   */
+  public function getContainerAcl($containerName)
+  {
+    try {
+      return $this->blobService->getContainerAcl($containerName);
+    } catch(ServiceException $e){
+      $this->errorCode = $e->getCode();
+      $this->errorMessage = $e->getMessage();
+      return false;
+    }
   }
 
   /**
@@ -257,6 +290,29 @@ class AzureBlob
   }
 
   /**
+   * Generate Shared Access URL
+   *
+   * @param string $containerName container name
+   * @param string $blobName blob name
+   * @param string $start start iso date
+   * @param string $end end iso date
+   * @param string $signedIdentifier signed identifier
+   * @return string URL
+   */
+  public function generateSharedAccessUrl($containerName, $blobName, $start, $end, $signedIdentifier = "")
+  {
+    $stringToSign = "r" . "\n" .
+                    $start . "\n" .
+                    $end . "\n" .
+                    "/" . $this->accountName . "/" . $containerName . "/" . $blobName . "\n" .
+                    $signedIdentifier;
+    $signature = urlencode(base64_encode(hash_hmac('sha256', $stringToSign, base64_decode($this->accessKey), true)));
+    return "http://" . $this->accountName . ".blob.core.windows.net/" . $containerName ."/" . $blobName .
+           "?st=" . urlencode($start) . "&se=" . urlencode($end) .
+           "&sr=b&sp=r&sig=" . $signature;
+  }
+
+  /**
    * Delete Blob
    *
    * @param string $containerName container name
@@ -267,6 +323,28 @@ class AzureBlob
   {
     try {
       $blob = $this->blobService->deleteBlob($containerName, $blobName);
+      return true;
+
+    } catch(ServiceException $e){
+      $this->errorCode = $e->getCode();
+      $this->errorMessage = $e->getMessage();
+      return false;
+    }
+  }
+
+  /**
+   * Copy Blob
+   *
+   * @param string $toContainerName container name
+   * @param string $toBlobName blob name
+   * @param string $fromContainerName container name
+   * @param string $fromBlobName blob name
+   * @return bool
+   */
+  public function copyBlob($toContainerName, $toBlobName, $fromContainerName, $fromBlobName)
+  {
+    try {
+      $blob = $this->blobService->copyBlob($toContainerName, $toBlobName, $fromContainerName, $fromBlobName);
       return true;
 
     } catch(ServiceException $e){
@@ -420,12 +498,12 @@ h1 {
 }
 
 .element {
-  width: 1080px;
+  width: 1180px;
   clear: both;
 }
 
 .element .link {
-  width: 58%;
+  width: 55%;
   overflow-x: auto;
   margin-right: 5px;
   float: left;
@@ -439,7 +517,7 @@ h1 {
 }
 
 .element .button {
-  width: 20%;
+  width: 23%;
   float: left;
 }
 
@@ -520,6 +598,12 @@ h1 {
       foreach ($containerList->getContainers() as $container) {
         $properties = $container->getProperties();
         $metadata = $container->getMetadata();
+$acl=$azureBlob->getContainerAcl($container->getName());
+$ct=$acl->getContainerACL();
+$parse=array();
+$ct->create("b",$parse);
+echo "<!--";print_r($acl);echo "-->\n";
+echo "<!--";print_r($ct->getSignedIdentifiers());echo "-->\n";
 ?>
   <div class="element">
     <span class="link"><a href="<?php echo $container->getUrl();?>"><?php echo $container->getName();?></a></span>
@@ -626,6 +710,7 @@ h1 {
       foreach ($blobList as $blob) {
         $properties = $blob->getProperties();
         $metadata = $blob->getMetadata();
+        $sas = $azureBlob->generateSharedAccessUrl($containerName, $blob->getName(), Utilities::isoDate(time()-500), Utilities::isoDate(time()+3000));
 ?>
   <div class="element">
     <span class="link"><a href="<?php echo $blob->getUrl();?>" target="_blank"><?php echo $blob->getName();?></a></span>
@@ -647,6 +732,7 @@ h1 {
         <input type="hidden" name="blobName" value="<?php echo $blob->getName();?>">
         <input type="submit" value="delete">
       </form>
+      <a href="<?php echo $sas;?>" target="_blank">SAS</a>&nbsp;
       <a href="#" onMouseOver="document.getElementById('metadata<?php echo $id;?>').style.display='block';" onMouseOut="document.getElementById('metadata<?php echo $id;?>').style.display='none';">
         metadata
       </a>
