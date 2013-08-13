@@ -34,6 +34,8 @@ $maxUploadFileSize = 1024 * 1024 *1024;
 use WindowsAzure\Common\ServicesBuilder;
 use WindowsAzure\Common\ServiceException;
 
+use WindowsAzure\Blob\BlobRestProxy;
+
 use WindowsAzure\Blob\Models\CommitBlobBlocksOptions;
 use WindowsAzure\Blob\Models\CreateContainerOptions;
 use WindowsAzure\Blob\Models\PublicAccessType;
@@ -41,13 +43,74 @@ use WindowsAzure\Blob\Models\PublicAccessType;
 use WindowsAzure\Blob\Models\ListContainersResult;
 use WindowsAzure\Blob\Models\Container;
 use WindowsAzure\Blob\Models\ContainerProperties;
-use WindowsAzure\Blob\Models\GetContainerAclResult;
+//use WindowsAzure\Blob\Models\GetContainerAclResult;
 
 use WindowsAzure\Blob\Models\Blob;
 use WindowsAzure\Blob\Models\Block;
 use WindowsAzure\Blob\Models\BlobBlockType;
 
 use WindowsAzure\Common\Internal\Utilities;
+
+class MyBlobRestProxy extends BlobRestProxy
+{
+    private function _getCopyBlobSourceName($containerName, $blobName, $options)
+    {
+        $sourceName  = 'https://' . $this->getAccountName() . ".blob.core.windows.net";
+        $sourceName .= '/' . $containerName . '/' . $blobName;
+
+        if (!is_null($options->getSourceSnapshot())) {
+            $sourceName .= '?snapshot=' . $options->getSourceSnapshot();
+        }
+
+        return $sourceName;
+    }
+}
+
+class MyServicesBuilder extends ServicesBuilder
+{
+    public function createBlobService($connectionString)
+    {
+        $settings = StorageServiceSettings::createFromConnectionString(
+            $connectionString
+        );
+
+        $httpClient    = $this->httpClient();
+        $serializer    = $this->serializer();
+        $uri           = Utilities::tryAddUrlScheme(
+            $settings->getBlobEndpointUri()
+        );
+
+        $blobWrapper = new MyBlobRestProxy(
+            $httpClient,
+            $uri,
+            $settings->getName(),
+            $serializer
+        );
+
+        // Adding headers filter
+        $headers = array();
+
+        $headers[Resources::X_MS_VERSION] = Resources::STORAGE_API_LATEST_VERSION;
+
+        $headersFilter = new HeadersFilter($headers);
+        $blobWrapper   = $blobWrapper->withFilter($headersFilter);
+
+        // Adding date filter
+        $dateFilter  = new DateFilter();
+        $blobWrapper = $blobWrapper->withFilter($dateFilter);
+
+        $authFilter = new AuthenticationFilter(
+            $this->blobAuthenticationScheme(
+                $settings->getName(),
+                $settings->getKey()
+            )
+        );
+
+        $blobWrapper = $blobWrapper->withFilter($authFilter);
+
+        return $blobWrapper;
+    }
+}
 
 /**
  * This class provides Azure Blob interface
@@ -107,7 +170,7 @@ class AzureBlob
                         ';AccountKey=' . $accessKey;
 
     /* connection establish */
-    $this->blobService = ServicesBuilder::getInstance()->createBlobService($connectionString);
+    $this->blobService = MyServicesBuilder::getInstance()->createBlobService($connectionString);
 
     $this->accountName = $accountName;
     $this->accessKey = $accessKey;
@@ -144,6 +207,7 @@ class AzureBlob
    * @param string containerName container name
    * @return ContainerACL
    */
+/*
   public function getContainerAcl($containerName)
   {
     try {
@@ -154,6 +218,7 @@ class AzureBlob
       return false;
     }
   }
+*/
 
   /**
    * Create Container
@@ -598,12 +663,6 @@ h1 {
       foreach ($containerList->getContainers() as $container) {
         $properties = $container->getProperties();
         $metadata = $container->getMetadata();
-$acl=$azureBlob->getContainerAcl($container->getName());
-$ct=$acl->getContainerACL();
-$parse=array();
-$ct->create("b",$parse);
-echo "<!--";print_r($acl);echo "-->\n";
-echo "<!--";print_r($ct->getSignedIdentifiers());echo "-->\n";
 ?>
   <div class="element">
     <span class="link"><a href="<?php echo $container->getUrl();?>"><?php echo $container->getName();?></a></span>
